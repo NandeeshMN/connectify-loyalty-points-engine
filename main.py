@@ -4,7 +4,7 @@ from database import engine
 from models import Base
 
 from database import engine, SessionLocal
-from models import Base, Event
+from models import Base, Event, Ledger
 from schemas import EventCreate
 
 # Create all database tables
@@ -47,6 +47,27 @@ def create_event(event: EventCreate):
 
     db.add(new_event)
     db.commit()
+
+    # Award points based on event type
+    points = 0
+
+    if event.event_type == "purchase":
+        points = 10
+
+    elif event.event_type == "referral":
+        points = 50
+
+
+    ledger_entry = Ledger(
+        user_id=event.user_id,
+        event_id=event.event_id,
+        points=points,
+        transaction_type="CREDIT"
+    )
+
+    db.add(ledger_entry)
+    db.commit()
+    db.close()
 
     return {
         "message": "Event created successfully"
