@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from sqlalchemy import func
-
+from rules import calculate_points
 from database import engine, SessionLocal
 from models import Base, Event, Ledger, Reward
-from schemas import EventCreate, RedeemRequest
+from schemas import EventCreate, RedeemRequest, ReverseRequest
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -42,21 +42,18 @@ def create_event(event: EventCreate):
         event_id=event.event_id,
         user_id=event.user_id,
         event_type=event.event_type,
-        amount=event.amount
+        amount=event.amount,
+        event_date=event.event_date
     )
 
     db.add(new_event)
     db.commit()
 
-    # Award points based on event type
-    points = 0
-
-    if event.event_type == "purchase":
-        points = 10
-
-    elif event.event_type == "referral":
-        points = 50
-
+        # Calculate points using rules engine
+    points = calculate_points(
+    event.event_type,
+    event.event_date
+)
     ledger_entry = Ledger(
         user_id=event.user_id,
         event_id=event.event_id,
@@ -172,4 +169,61 @@ def redeem_reward(request: RedeemRequest):
     return {
         "message": "Reward redeemed successfully",
         "points_deducted": points_deducted
+    }
+
+@app.post("/reverse")
+def reverse_event(request: ReverseRequest):
+
+    db = SessionLocal()
+
+    # Find original event
+    event = db.query(Event).filter(
+        Event.event_id == request.event_id
+    ).first()
+
+    if not event:
+        db.close()
+        return {
+            "message": "Event not found"
+        }
+
+    # Check if already reversed
+    existing_reversal = db.query(Ledger).filter(
+        Ledger.event_id == f"REVERSAL_{request.event_id}"
+    ).first()
+
+    if existing_reversal:
+        db.close()
+        return {
+            "message": "Event already reversed"
+        }
+
+    # Find original ledger entry
+    original_ledger = db.query(Ledger).filter(
+        Ledger.event_id == request.event_id
+    ).first()
+
+    if not original_ledger:
+        db.close()
+        return {
+            "message": "Ledger entry not found"
+        }
+
+    reversal_points = -original_ledger.points
+
+    reversal_entry = Ledger(
+        user_id=event.user_id,
+        event_id=f"REVERSAL_{request.event_id}",
+        points=reversal_points,
+        transaction_type="DEBIT"
+    )
+
+    db.add(reversal_entry)
+    db.commit()
+
+    db.close()
+
+    return {
+        "message": "Event reversed successfully",
+        "points_reversed": abs(reversal_points)
     }

@@ -1,0 +1,8 @@
+{
+  "base_points": {
+    "purchase": 10,
+    "referral": 50
+  },
+  "weekend_multiplier": 2,
+  "max_points_per_event": 100
+}

@@ -8,15 +8,11 @@ class Event(Base):
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, index=True)
-
     event_id = Column(String, unique=True, nullable=False)
-
     user_id = Column(String, nullable=False)
-
     event_type = Column(String, nullable=False)
-
     amount = Column(Float, nullable=False)
-
+    event_date = Column(DateTime, nullable=False)
     created_at = Column(
         DateTime,
         default=datetime.utcnow
