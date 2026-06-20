@@ -1,11 +1,9 @@
 from fastapi import FastAPI
-
-from database import engine
-from models import Base
+from sqlalchemy import func
 
 from database import engine, SessionLocal
-from models import Base, Event, Ledger
-from schemas import EventCreate
+from models import Base, Event, Ledger, Reward
+from schemas import EventCreate, RedeemRequest
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -23,6 +21,7 @@ def home():
         "message": "Loyalty Points Engine is running"
     }
 
+
 @app.post("/events")
 def create_event(event: EventCreate):
 
@@ -34,6 +33,7 @@ def create_event(event: EventCreate):
     ).first()
 
     if existing_event:
+        db.close()
         return {
             "message": "Event already processed"
         }
@@ -57,7 +57,6 @@ def create_event(event: EventCreate):
     elif event.event_type == "referral":
         points = 50
 
-
     ledger_entry = Ledger(
         user_id=event.user_id,
         event_id=event.event_id,
@@ -67,8 +66,110 @@ def create_event(event: EventCreate):
 
     db.add(ledger_entry)
     db.commit()
+
     db.close()
 
     return {
         "message": "Event created successfully"
+    }
+
+
+@app.get("/balance/{user_id}")
+def get_balance(user_id: str):
+
+    db = SessionLocal()
+
+    balance = db.query(
+        func.sum(Ledger.points)
+    ).filter(
+        Ledger.user_id == user_id
+    ).scalar()
+
+    db.close()
+
+    return {
+        "user_id": user_id,
+        "balance": balance or 0
+    }
+
+@app.post("/add-rewards")
+def add_rewards():
+
+    db = SessionLocal()
+
+    reward1 = Reward(
+        reward_name="₹100 Coupon",
+        points_required=10
+    )
+
+    reward2 = Reward(
+        reward_name="₹500 Coupon",
+        points_required=50
+    )
+
+    reward3 = Reward(
+        reward_name="Free Delivery",
+        points_required=5
+    )
+
+    db.add_all([reward1, reward2, reward3])
+    db.commit()
+
+    db.close()
+
+    return {
+        "message": "Sample rewards added successfully"
+    }
+
+@app.post("/redeem")
+def redeem_reward(request: RedeemRequest):
+
+    db = SessionLocal()
+
+    # Find reward
+    reward = db.query(Reward).filter(
+        Reward.reward_name == request.reward_name
+    ).first()
+
+    if not reward:
+        db.close()
+        return {
+            "message": "Reward not found"
+        }
+
+    # Calculate balance
+    balance = db.query(
+        func.sum(Ledger.points)
+    ).filter(
+        Ledger.user_id == request.user_id
+    ).scalar()
+
+    balance = balance or 0
+
+    # Check sufficient balance
+    if balance < reward.points_required:
+        db.close()
+        return {
+            "message": "Insufficient points",
+            "current_balance": balance
+        }
+
+    # Deduct points
+    ledger_entry = Ledger(
+        user_id=request.user_id,
+        event_id=f"REDEEM_{reward.id}",
+        points=-reward.points_required,
+        transaction_type="DEBIT"
+    )
+
+    points_deducted = reward.points_required
+
+    db.add(ledger_entry)
+    db.commit()
+
+    db.close()
+
+    return {
+        "message": "Reward redeemed successfully",
+        "points_deducted": points_deducted
     }

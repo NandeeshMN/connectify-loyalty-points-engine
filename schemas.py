@@ -6,3 +6,7 @@ class EventCreate(BaseModel):
     user_id: str
     event_type: str
     amount: float
+
+class RedeemRequest(BaseModel):
+    user_id: str
+    reward_name: str
